@@ -74,8 +74,12 @@ protected:
           
             float fx = (float)(e->x() - r.x()) / r.width();
             float fy = 1.0f - (float)(e->y() - r.y()) / r.height();
-            if(fx < 0) fx = 0; if(fx > 1) fx = 1;
-            if(fy < 0) fy = 0; if(fy > 1) fy = 1;
+            // FIXED: Indentation warning by splitting lines
+            if(fx < 0) fx = 0; 
+            if(fx > 1) fx = 1;
+            if(fy < 0) fy = 0; 
+            if(fy > 1) fy = 1;
+            
             if(m_dragIdx == 0) fx = 0;
             if(m_dragIdx == (int)m_activeModule->m_points.size()-1) fx = 1;
             m_activeModule->m_points[m_dragIdx] = {fx, fy};
@@ -204,7 +208,9 @@ protected:
             if(bin >= 256) bin = 255;
          
             float h = (1.0f - (20.0f * std::log10(std::abs(buffer[bin]) + 1e-5f) / -60.0f)); 
-            if(h < 0) h = 0; if(h > 1) h = 1;
+            // FIXED: Indentation warning by splitting lines
+            if(h < 0) h = 0; 
+            if(h > 1) h = 1;
           
             p.drawRect(i, height() - h * height(), 3, h * height());
         }

@@ -138,28 +138,29 @@ MasteringSuiteDialog::MasteringSuiteDialog(MasteringSuiteControls* c) : EffectCo
             auto resetCurve = [](CompModule& m) { m.m_points = {{0,0}, {1,1}}; m.updateLUT(); };
             resetCurve(effect->m_compLow); resetCurve(effect->m_compMid); 
             resetCurve(effect->m_compHigh); resetCurve(effect->m_compMaster);
+            // FIXED: Added 'f' suffix to all floating point constants to prevent C4305 truncation error
             if(k == 0) { // A: ALL ROUND
-                 effect->m_compLow.m_points = {{0,0}, {0.5, 0.55}, {1,1}};
-                 effect->m_compMid.m_points = {{0,0}, {0.5, 0.45}, {1,1}};
-                 effect->m_compHigh.m_points = {{0,0}, {0.5, 0.55}, {1,1}};
-                 effect->m_compMaster.m_points = {{0,0}, {0.8, 0.85}, {1,1}};
-                 c->m_lowSat.setValue(0.1); 
+                 effect->m_compLow.m_points = {{0,0}, {0.5f, 0.55f}, {1,1}};
+                 effect->m_compMid.m_points = {{0,0}, {0.5f, 0.45f}, {1,1}};
+                 effect->m_compHigh.m_points = {{0,0}, {0.5f, 0.55f}, {1,1}};
+                 effect->m_compMaster.m_points = {{0,0}, {0.8f, 0.85f}, {1,1}};
+                 c->m_lowSat.setValue(0.1f); 
             }
             else if(k == 1) { // B: BASS & PUNCH
-                 effect->m_compLow.m_points = {{0,0}, {0.7, 0.8}, {1,1}};
-                 c->m_lowGain.setValue(2.0); 
-                 effect->m_compMaster.m_points = {{0,0}, {0.9, 0.9}, {1,1}};
+                 effect->m_compLow.m_points = {{0,0}, {0.7f, 0.8f}, {1,1}};
+                 c->m_lowGain.setValue(2.0f); 
+                 effect->m_compMaster.m_points = {{0,0}, {0.9f, 0.9f}, {1,1}};
             }
             else if(k == 2) { // C: CRISP
-                 effect->m_compLow.m_points = {{0,0}, {0.5, 0.45}, {1,1}};
-                 effect->m_compHigh.m_points = {{0,0}, {0.4, 0.5}, {1,1}};
-                 c->m_highGain.setValue(1.5);
-                 c->m_highSat.setValue(0.25);
+                 effect->m_compLow.m_points = {{0,0}, {0.5f, 0.45f}, {1,1}};
+                 effect->m_compHigh.m_points = {{0,0}, {0.4f, 0.5f}, {1,1}};
+                 c->m_highGain.setValue(1.5f);
+                 c->m_highSat.setValue(0.25f);
             }
             else if(k == 3) { // D: DEPTH
-                 effect->m_compMid.m_points = {{0,0}, {0.4, 0.6}, {1,1}};
-                 effect->m_compMaster.m_points = {{0,0}, {0.6, 0.75}, {1,1}};
-                 c->m_mastGain.setValue(2.0);
+                 effect->m_compMid.m_points = {{0,0}, {0.4f, 0.6f}, {1,1}};
+                 effect->m_compMaster.m_points = {{0,0}, {0.6f, 0.75f}, {1,1}};
+                 c->m_mastGain.setValue(2.0f);
             }
             // FORCE UPDATE
             effect->m_compLow.updateLUT(); effect->m_compMid.updateLUT();

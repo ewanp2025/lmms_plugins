@@ -5,23 +5,26 @@
 #include <cmath>
 #include <algorithm>
 #include "MasteringSuiteControls.h"
+
 namespace lmms {
+
 struct CurvePoint {
     float x, y; 
     bool operator<(const CurvePoint& other) const { return x < other.x; }
 };
+
 // --- ROBUST BIQUAD ENGINE ---
 class Biquad {
 public:
     float b0=0, b1=0, b2=0, a1=0, a2=0;
     float x1=0, x2=0, y1=0, y2=0;
-  
+    
     // Copy Constructor: Only copy coefficients, NOT state (x1,y1)
-    // This prevents "pops" when knobs are moved
     Biquad& operator=(const Biquad& other) {
         b0=other.b0; b1=other.b1; b2=other.b2; a1=other.a1; a2=other.a2;
         return *this;
     }
+
     void calc(float sr, float freq, int type) {
         if (freq < 10.0f) freq = 10.0f;
         if (freq > sr * 0.49f) freq = sr * 0.49f;
@@ -39,13 +42,13 @@ public:
     }
     inline float process(float in) {
         float out = b0 * in + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
-        // Anti-denormal fix
         if (!std::isfinite(out) || std::abs(out) < 1e-20f) out = 0.0f;
         x2 = x1; x1 = in; y2 = y1; y1 = out;
         return out;
     }
     void reset() { x1=0; x2=0; y1=0; y2=0; }
 };
+
 // --- STEREO LINKWITZ-RILEY 4 (24dB/oct) ---
 class StereoLR4 {
 public:
@@ -54,12 +57,12 @@ public:
         l1.calc(sr, freq, type); l2 = l1; r1 = l1; r2 = l1; 
     }
     void process(float& l, float& r) { 
-        // Cascaded Biquads for 24dB slope
         l = l2.process(l1.process(l)); 
         r = r2.process(r1.process(r)); 
     }
     void reset() { l1.reset(); l2.reset(); r1.reset(); r2.reset(); }
 };
+
 // --- COMPRESSOR MODULE ---
 class CompModule {
 public:
@@ -69,12 +72,15 @@ public:
     float m_env=0;
     float m_rmsSum=0;
     float m_currentGR = 0.0f; 
+
     CompModule() {
         m_points = { {0.0f, 0.0f}, {1.0f, 1.0f} };
         m_lut.resize(4096);
         updateLUT();
     }
+
     void init(float sr) { m_sr = sr; m_env = 0; m_rmsSum = 0; m_currentGR = 0; }
+
     void updateLUT() {
         if(m_points.empty()) return;
         std::sort(m_points.begin(), m_points.end());
@@ -103,6 +109,7 @@ public:
             }
         }
     }
+
     void process(float& l, float& r, FloatModel& att, FloatModel& rel, FloatModel& gain, bool useRMS) {
         for(int k=0; k<2; ++k) { 
             float inL = l; float inR = r; 
@@ -113,51 +120,55 @@ public:
             } else {
                 level = std::max(std::abs(inL), std::abs(inR));
             }
+
             float inDB = 20.f * std::log10(level + 1e-6f);
             float x = (inDB + 60.0f) / 60.0f;
-            if(x < 0) x = 0; if(x > 1) x = 1;
+            
+            // FIX: Use std::clamp logic to avoid -Wmisleading-indentation error
+            x = std::max(0.0f, std::min(x, 1.0f));
+
             int idx = (int)(x * (m_lut.size() - 1));
             float targetY = m_lut[idx];
             float targetDB = (targetY * 60.0f) - 60.0f;
             float gainChangeDB = targetDB - inDB;
-          
+            
             float effSr = m_sr * 2.0f; 
             float atC = std::exp(-1.f/(att.value()*0.001f*effSr));
             float reC = std::exp(-1.f/(rel.value()*0.001f*effSr));
-        
+            
             if(gainChangeDB < m_env) m_env = atC * m_env + (1-atC)*gainChangeDB;
             else                     m_env = reC * m_env + (1-reC)*gainChangeDB;
-          
+            
             m_currentGR = m_env; 
+
             float totalGain = std::pow(10.f, (m_env + gain.value()) / 20.f);
             l *= totalGain; r *= totalGain;
         }
     }
 };
+
 class MasteringSuiteEffect : public Effect {
 public:
     MasteringSuiteEffect(Model* parent, const Descriptor::SubPluginFeatures::Key* key);
     virtual ~MasteringSuiteEffect() = default;
-  
+    
     EffectControls* controls() override { return &m_controls; }
     ProcessStatus processImpl(SampleFrame* buf, const fpp_t frames) override;
+
     CompModule m_compLow, m_compMid, m_compHigh, m_compMaster;
-  
-    // FILTERS
+    
     StereoLR4 m_globalLoCut, m_globalHiCut; 
-   
-    // NEW: Linkwitz-Riley Crossovers (Replaces FIR)
     StereoLR4 m_crLowLP, m_crLowHP;
     StereoLR4 m_crHighLP, m_crHighHP;
-   
+    
     std::vector<float> m_scopeInL, m_scopeInR;
     std::vector<float> m_scopeOutL, m_scopeOutR;
+
     MasteringSuiteControls m_controls;
+
     std::vector<float> m_lookaheadBufL, m_lookaheadBufR;
     int m_bufferPos = 0;
     float m_limiterEnv = 1.0f;
 };
 
-
-
-} // namespace lmms
+}

@@ -171,4 +171,4 @@ public:
     float m_limiterEnv = 1.0f;
 };
 
-}
+} // namespace lmms

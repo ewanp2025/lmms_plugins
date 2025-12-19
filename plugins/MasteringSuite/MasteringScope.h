@@ -1,1 +1,214 @@
-#pragma once#include <QWidget>#include <QPainter>#include <QPainterPath> #include <QMouseEvent> #include <vector>#include <deque>#include <cmath>#include <algorithm>#include "TinyFFT.h"#include "MasteringSuite.h" namespace lmms {namespace gui {class MasteringScope : public QWidget {    Q_OBJECTpublic:    MasteringScope(QWidget* parent = nullptr) : QWidget(parent) {        setAttribute(Qt::WA_OpaquePaintEvent);        startTimer(30);         setMouseTracking(true);        setCursor(Qt::CrossCursor);         m_historyIn.resize(width(), 0.0f);        m_historyOut.resize(width(), 0.0f);    }    std::vector<float>* m_ptrInL = nullptr;    std::vector<float>* m_ptrInR = nullptr;    std::vector<float>* m_ptrOutL = nullptr;    std::vector<float>* m_ptrOutR = nullptr;    std::deque<float> m_historyIn;     std::deque<float> m_historyOut;         CompModule* m_activeModule = nullptr;    int m_mode = 0;     float m_currentPeak = 0.0f; // Debug Valueprotected:    int m_dragIdx = -1;    void mousePressEvent(QMouseEvent* e) override {        if (!m_activeModule || m_mode == 1) {               if(e->x() > width()*0.45) { m_mode = !m_mode; update(); }              return;        }        int splitPoint = width() * 0.45;        if (e->x() > splitPoint) { m_mode = !m_mode; update(); return; }        QRect r(0, 0, splitPoint, height());        float fx = (float)(e->x() - r.x()) / r.width();        float fy = 1.0f - (float)(e->y() - r.y()) / r.height();        auto& pts = m_activeModule->m_points;                for(size_t i=0; i<pts.size(); ++i) {            if (std::abs(pts[i].x - fx) < 0.05f && std::abs(pts[i].y - fy) < 0.05f) {                if (e->button() == Qt::RightButton) {                      if(pts.size() > 2 && i > 0 && i < pts.size()-1) {                         pts.erase(pts.begin() + i);                         m_activeModule->updateLUT();                         update();                     }                } else {                    m_dragIdx = i;                }                return;            }        }                if (e->button() == Qt::LeftButton) {            pts.push_back({fx, fy});            m_activeModule->updateLUT();            m_dragIdx = -1;             update();        }    }    void mouseMoveEvent(QMouseEvent* e) override {        if (m_dragIdx != -1 && m_activeModule) {            int splitPoint = width() * 0.45;            QRect r(0, 0, splitPoint, height());                        float fx = (float)(e->x() - r.x()) / r.width();            float fy = 1.0f - (float)(e->y() - r.y()) / r.height();            if(fx < 0) fx = 0; if(fx > 1) fx = 1;            if(fy < 0) fy = 0; if(fy > 1) fy = 1;            if(m_dragIdx == 0) fx = 0;            if(m_dragIdx == (int)m_activeModule->m_points.size()-1) fx = 1;            m_activeModule->m_points[m_dragIdx] = {fx, fy};            m_activeModule->updateLUT();            update();        }    }    void mouseReleaseEvent(QMouseEvent*) override { m_dragIdx = -1; }    void timerEvent(QTimerEvent*) override { update(); }    void paintEvent(QPaintEvent*) override {        QPainter p(this);        p.fillRect(rect(), QColor(30, 32, 38));         p.setRenderHint(QPainter::Antialiasing);        if(!m_ptrOutL || m_ptrOutL->empty()) return;        int chunkSize = m_ptrOutL->size() / 4; if(chunkSize < 1) chunkSize = 1;        float maxChunkPeak = 0.0f;        for(int c=0; c<4; ++c) {            float sumIn = 0, sumOut = 0;            int start = c * chunkSize; int end = start + chunkSize;            if(end > (int)m_ptrOutL->size()) end = m_ptrOutL->size();                        for(int i=start; i<end; ++i) {                float valIn = std::abs((*m_ptrInL)[i] + (*m_ptrInR)[i]) * 0.5f;                if(valIn > sumIn) sumIn = valIn;                                 float valOut = std::abs((*m_ptrOutL)[i] + (*m_ptrOutR)[i]) * 0.5f;                if(valOut > sumOut) sumOut = valOut;             }            if(sumOut > maxChunkPeak) maxChunkPeak = sumOut;            m_historyIn.push_back(sumIn);            if(m_historyIn.size() > (size_t)width()) m_historyIn.pop_front();            m_historyOut.push_back(sumOut);            if(m_historyOut.size() > (size_t)width()) m_historyOut.pop_front();        }                m_currentPeak = maxChunkPeak;        if(m_mode == 0) {            int splitPoint = width() * 0.45;            p.setPen(QColor(0, 0, 0, 100)); p.drawLine(splitPoint, 0, splitPoint, height());                        drawTransferCurve(p, QRect(0, 0, splitPoint, height()));                        p.setClipRect(QRect(splitPoint, 0, width() - splitPoint, height()));             drawOutputWave(p, QRect(splitPoint, 0, width() - splitPoint, height()));            p.setClipping(false);        } else {            drawSpectrum(p);        }    }    void drawTransferCurve(QPainter& p, QRect r) {        p.setPen(QColor(255, 255, 255, 15));        for(int i=1; i<4; ++i) {            int x = r.left() + (r.width() * i / 4); p.drawLine(x, r.top(), x, r.bottom());            int y = r.top() + (r.height() * i / 4); p.drawLine(r.left(), y, r.right(), y);        }        p.setPen(QColor(255, 255, 255, 30)); p.drawLine(r.bottomLeft(), r.topRight());        p.setPen(QColor(255, 255, 255, 150)); p.drawText(r.left()+5, r.top()+15, "DRAW CURVE (Left=Add/Drag, Right=Del)");        if(!m_activeModule) return;                const auto& lut = m_activeModule->m_lut;        if (!lut.empty()) {            QPainterPath path;            float stepX = (float)r.width() / (lut.size() - 1);                        path.moveTo(r.left(), r.bottom() - lut[0] * r.height());                        for(size_t i=1; i<lut.size(); i+=4) {                 float x = r.left() + i * stepX;                 float y = r.bottom() - lut[i] * r.height();                 path.lineTo(x, y);            }            path.lineTo(r.right(), r.bottom() - lut.back() * r.height());            p.setPen(QPen(QColor(128, 255, 0), 2));            p.setBrush(Qt::NoBrush);            p.drawPath(path);        }        auto pts = m_activeModule->m_points;         p.setBrush(QColor(255, 255, 0)); p.setPen(Qt::NoPen);        for(const auto& pt : pts) {            p.drawEllipse(QPointF(r.left() + pt.x * r.width(), r.bottom() - pt.y * r.height()), 4, 4);        }    }    void drawOutputWave(QPainter& p, QRect r) {        p.setPen(QColor(255, 50, 50, 150));        float scaleY = r.height() * 0.85f;         float ceilingY = r.bottom() - (1.0f * scaleY);        p.drawLine(r.left(), ceilingY, r.right(), ceilingY);        // DEBUG TEXT READOUT        p.setPen(QColor(255, 255, 255));        p.drawText(r.left() + 10, r.top() + 20, QString("PEAK: %1").arg(m_currentPeak, 0, 'f', 4));        if(m_historyOut.empty()) return;        QPainterPath pathOut;        pathOut.moveTo(r.left(), r.bottom());         int x = r.right();         int hIdx = m_historyOut.size() - 1;        while(x > r.left() && hIdx >= 0) {            float rawVal = m_historyOut[hIdx];            if(rawVal < 0.00001f) rawVal = 0.0f;             // LINEAR SCALING            float val = rawVal;             if(val > 1.2f) val = 1.2f;             float y = r.bottom() - (val * scaleY);            pathOut.lineTo(x, y);            x--; hIdx--;        }        pathOut.lineTo(r.left(), r.bottom());        pathOut.closeSubpath();        QColor greenFill(100, 255, 100, 150);         p.setBrush(greenFill); p.setPen(Qt::NoPen);         p.drawPath(pathOut);        p.setBrush(Qt::NoBrush); p.setPen(QColor(200, 255, 200, 255));        p.drawPath(pathOut);    }    void drawSpectrum(QPainter& p) {        if(!m_ptrOutL || m_ptrOutL->size() < 512) return;        std::vector<TinyFFT::Complex> buffer(512);                for(size_t i=0; i<512; ++i) buffer[i] = TinyFFT::Complex(((*m_ptrOutL)[i] + (*m_ptrOutR)[i]) * 0.5f * TinyFFT::window(i, 512), 0);        TinyFFT::fft(buffer);                p.setBrush(QColor(128, 255, 0, 180)); p.setPen(Qt::NoPen);                for(int i=0; i<width(); i+=4) {             float t = (float)i / width(); size_t bin = (size_t)(std::pow(t, 2.5f) * 256);             if(bin >= 256) bin = 255;                        float h = (1.0f - (20.0f * std::log10(std::abs(buffer[bin]) + 1e-5f) / -60.0f));             if(h < 0) h = 0; if(h > 1) h = 1;                        p.drawRect(i, height() - h * height(), 3, h * height());        }    }};}}
+#pragma once
+#include <QWidget>
+#include <QPainter>
+#include <QPainterPath> 
+#include <QMouseEvent> 
+#include <vector>
+#include <deque>
+#include <cmath>
+#include <algorithm>
+#include "TinyFFT.h"
+#include "MasteringSuite.h" 
+namespace lmms {
+namespace gui {
+class MasteringScope : public QWidget {
+    Q_OBJECT
+public:
+    MasteringScope(QWidget* parent = nullptr) : QWidget(parent) {
+        setAttribute(Qt::WA_OpaquePaintEvent);
+        startTimer(30); 
+        setMouseTracking(true);
+        setCursor(Qt::CrossCursor); 
+        m_historyIn.resize(width(), 0.0f);
+        m_historyOut.resize(width(), 0.0f);
+    }
+    std::vector<float>* m_ptrInL = nullptr;
+    std::vector<float>* m_ptrInR = nullptr;
+    std::vector<float>* m_ptrOutL = nullptr;
+    std::vector<float>* m_ptrOutR = nullptr;
+    std::deque<float> m_historyIn; 
+    std::deque<float> m_historyOut; 
+    CompModule* m_activeModule = nullptr;
+    int m_mode = 0; 
+    float m_currentPeak = 0.0f; // Debug Value
+protected:
+    int m_dragIdx = -1;
+    void mousePressEvent(QMouseEvent* e) override {
+        if (!m_activeModule || m_mode == 1) {  
+             if(e->x() > width()*0.45) { m_mode = !m_mode; update(); } 
+             return;
+        }
+        int splitPoint = width() * 0.45;
+        if (e->x() > splitPoint) { m_mode = !m_mode; update(); return; }
+        QRect r(0, 0, splitPoint, height());
+        float fx = (float)(e->x() - r.x()) / r.width();
+        float fy = 1.0f - (float)(e->y() - r.y()) / r.height();
+        auto& pts = m_activeModule->m_points;
+   
+        for(size_t i=0; i<pts.size(); ++i) {
+            if (std::abs(pts[i].x - fx) < 0.05f && std::abs(pts[i].y - fy) < 0.05f) {
+                if (e->button() == Qt::RightButton) { 
+                     if(pts.size() > 2 && i > 0 && i < pts.size()-1) {
+                         pts.erase(pts.begin() + i);
+                         m_activeModule->updateLUT();
+                         update();
+                     }
+                } else {
+                    m_dragIdx = i;
+                }
+                return;
+            }
+        }
+    
+        if (e->button() == Qt::LeftButton) {
+            pts.push_back({fx, fy});
+            m_activeModule->updateLUT();
+            m_dragIdx = -1; 
+            update();
+        }
+    }
+    void mouseMoveEvent(QMouseEvent* e) override {
+        if (m_dragIdx != -1 && m_activeModule) {
+            int splitPoint = width() * 0.45;
+            QRect r(0, 0, splitPoint, height());
+          
+            float fx = (float)(e->x() - r.x()) / r.width();
+            float fy = 1.0f - (float)(e->y() - r.y()) / r.height();
+            if(fx < 0) fx = 0; if(fx > 1) fx = 1;
+            if(fy < 0) fy = 0; if(fy > 1) fy = 1;
+            if(m_dragIdx == 0) fx = 0;
+            if(m_dragIdx == (int)m_activeModule->m_points.size()-1) fx = 1;
+            m_activeModule->m_points[m_dragIdx] = {fx, fy};
+            m_activeModule->updateLUT();
+            update();
+        }
+    }
+    void mouseReleaseEvent(QMouseEvent*) override { m_dragIdx = -1; }
+    void timerEvent(QTimerEvent*) override { update(); }
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.fillRect(rect(), QColor(30, 32, 38)); 
+        p.setRenderHint(QPainter::Antialiasing);
+        if(!m_ptrOutL || m_ptrOutL->empty()) return;
+        int chunkSize = m_ptrOutL->size() / 4; if(chunkSize < 1) chunkSize = 1;
+        float maxChunkPeak = 0.0f;
+        for(int c=0; c<4; ++c) {
+            float sumIn = 0, sumOut = 0;
+            int start = c * chunkSize; int end = start + chunkSize;
+            if(end > (int)m_ptrOutL->size()) end = m_ptrOutL->size();
+        
+            for(int i=start; i<end; ++i) {
+                float valIn = std::abs((*m_ptrInL)[i] + (*m_ptrInR)[i]) * 0.5f;
+                if(valIn > sumIn) sumIn = valIn; 
+              
+                float valOut = std::abs((*m_ptrOutL)[i] + (*m_ptrOutR)[i]) * 0.5f;
+
+                if(valOut > sumOut) sumOut = valOut; 
+            }
+            if(sumOut > maxChunkPeak) maxChunkPeak = sumOut;
+            m_historyIn.push_back(sumIn);
+            if(m_historyIn.size() > (size_t)width()) m_historyIn.pop_front();
+            m_historyOut.push_back(sumOut);
+            if(m_historyOut.size() > (size_t)width()) m_historyOut.pop_front();
+        }
+    
+        m_currentPeak = maxChunkPeak;
+        if(m_mode == 0) {
+            int splitPoint = width() * 0.45;
+            p.setPen(QColor(0, 0, 0, 100)); p.drawLine(splitPoint, 0, splitPoint, height());
+         
+            drawTransferCurve(p, QRect(0, 0, splitPoint, height()));
+         
+            p.setClipRect(QRect(splitPoint, 0, width() - splitPoint, height())); 
+            drawOutputWave(p, QRect(splitPoint, 0, width() - splitPoint, height()));
+            p.setClipping(false);
+        } else {
+            drawSpectrum(p);
+        }
+    }
+    void drawTransferCurve(QPainter& p, QRect r) {
+        p.setPen(QColor(255, 255, 255, 15));
+        for(int i=1; i<4; ++i) {
+            int x = r.left() + (r.width() * i / 4); p.drawLine(x, r.top(), x, r.bottom());
+            int y = r.top() + (r.height() * i / 4); p.drawLine(r.left(), y, r.right(), y);
+        }
+        p.setPen(QColor(255, 255, 255, 30)); p.drawLine(r.bottomLeft(), r.topRight());
+        p.setPen(QColor(255, 255, 255, 150)); p.drawText(r.left()+5, r.top()+15, "DRAW CURVE (Left=Add/Drag, Right=Del)");
+        if(!m_activeModule) return;
+     
+        const auto& lut = m_activeModule->m_lut;
+        if (!lut.empty()) {
+            QPainterPath path;
+            float stepX = (float)r.width() / (lut.size() - 1);
+           
+            path.moveTo(r.left(), r.bottom() - lut[0] * r.height());
+          
+            for(size_t i=1; i<lut.size(); i+=4) {
+                 float x = r.left() + i * stepX;
+                 float y = r.bottom() - lut[i] * r.height();
+                 path.lineTo(x, y);
+            }
+            path.lineTo(r.right(), r.bottom() - lut.back() * r.height());
+            p.setPen(QPen(QColor(128, 255, 0), 2));
+            p.setBrush(Qt::NoBrush);
+            p.drawPath(path);
+        }
+        auto pts = m_activeModule->m_points; 
+        p.setBrush(QColor(255, 255, 0)); p.setPen(Qt::NoPen);
+        for(const auto& pt : pts) {
+            p.drawEllipse(QPointF(r.left() + pt.x * r.width(), r.bottom() - pt.y * r.height()), 4, 4);
+        }
+    }
+    void drawOutputWave(QPainter& p, QRect r) {
+        p.setPen(QColor(255, 50, 50, 150));
+        float scaleY = r.height() * 0.85f; 
+        float ceilingY = r.bottom() - (1.0f * scaleY);
+        p.drawLine(r.left(), ceilingY, r.right(), ceilingY);
+        // DEBUG TEXT READOUT
+        p.setPen(QColor(255, 255, 255));
+        p.drawText(r.left() + 10, r.top() + 20, QString("PEAK: %1").arg(m_currentPeak, 0, 'f', 4));
+        if(m_historyOut.empty()) return;
+        QPainterPath pathOut;
+        pathOut.moveTo(r.left(), r.bottom()); 
+        int x = r.right(); 
+        int hIdx = m_historyOut.size() - 1;
+        while(x > r.left() && hIdx >= 0) {
+            float rawVal = m_historyOut[hIdx];
+            if(rawVal < 0.00001f) rawVal = 0.0f; 
+            // LINEAR SCALING
+            float val = rawVal; 
+            if(val > 1.2f) val = 1.2f; 
+            float y = r.bottom() - (val * scaleY);
+            pathOut.lineTo(x, y);
+            x--; hIdx--;
+        }
+        pathOut.lineTo(r.left(), r.bottom());
+        pathOut.closeSubpath();
+        QColor greenFill(100, 255, 100, 150); 
+        p.setBrush(greenFill); p.setPen(Qt::NoPen); 
+        p.drawPath(pathOut);
+        p.setBrush(Qt::NoBrush); p.setPen(QColor(200, 255, 200, 255));
+        p.drawPath(pathOut);
+    }
+    void drawSpectrum(QPainter& p) {
+        if(!m_ptrOutL || m_ptrOutL->size() < 512) return;
+        std::vector<TinyFFT::Complex> buffer(512);
+       
+        for(size_t i=0; i<512; ++i) buffer[i] = TinyFFT::Complex(((*m_ptrOutL)[i] + (*m_ptrOutR)[i]) * 0.5f * TinyFFT::window(i, 512), 0);
+        TinyFFT::fft(buffer);
+     
+        p.setBrush(QColor(128, 255, 0, 180)); p.setPen(Qt::NoPen);
+     
+        for(int i=0; i<width(); i+=4) { 
+            float t = (float)i / width(); size_t bin = (size_t)(std::pow(t, 2.5f) * 256); 
+            if(bin >= 256) bin = 255;
+         
+            float h = (1.0f - (20.0f * std::log10(std::abs(buffer[bin]) + 1e-5f) / -60.0f)); 
+            if(h < 0) h = 0; if(h > 1) h = 1;
+          
+            p.drawRect(i, height() - h * height(), 3, h * height());
+        }
+    }
+};
+} // namespace gui
+} // namespace lmms

@@ -64,6 +64,7 @@ SET(LMMS_PLUGIN_LIST
 	Sid
 	SlewDistortion
 	SlicerT
+	SpectralGate
 	SpectrumAnalyzer
 	StepGate
 	StereoEnhancer

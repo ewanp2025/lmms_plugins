@@ -192,8 +192,8 @@ private:
 
 };
 
-}
+} // namespace gui
 
-}
+} // namespace lmms
 
 #endif

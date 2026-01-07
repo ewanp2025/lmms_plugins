@@ -51,7 +51,6 @@ namespace gui { class RNG6View; }
 class ChaosVoice {
 
 public:
-
     ChaosVoice(std::shared_ptr<const ChaosPatch> patch, NotePlayHandle* _nph,
 
              const sample_rate_t _sample_rate, float _chaosAmt,

@@ -59,6 +59,7 @@ SET(LMMS_PLUGIN_LIST
 	Patman
 	PeakControllerEffect
 	GigPlayer
+	ReverseBeat
 	ReverbSC
 	RNG6
 	Sf2Player

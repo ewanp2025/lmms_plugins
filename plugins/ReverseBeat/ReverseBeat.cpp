@@ -82,7 +82,7 @@ ReverseBeatControlDialog::ReverseBeatControlDialog(ReverseBeatControls* controls
 
 }
 
-}
+} // namespace gui
 
 ReverseBeatControls::ReverseBeatControls(ReverseBeatEffect* effect) :
 
@@ -300,3 +300,4 @@ extern "C" {
 
 
 } // namespace lmms
+

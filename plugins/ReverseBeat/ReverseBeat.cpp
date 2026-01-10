@@ -59,7 +59,7 @@ ReverseBeatControlDialog::ReverseBeatControlDialog(ReverseBeatControls* controls
     layout->addWidget(makeKnob(tr("BIT"), &controls->m_crunchModel), 0, 2, Qt::AlignCenter);
 }
 
-}
+} // namespace gui
 ReverseBeatControls::ReverseBeatControls(ReverseBeatEffect* effect) :
 
 	EffectControls(effect),
@@ -208,3 +208,4 @@ PLUGIN_EXPORT Plugin* lmms_plugin_main(Model* parent, void* data) {
 
 
 } // namespace lmms
+

@@ -36,7 +36,7 @@ namespace gui
 
     };
 
-}
+} // namespace gui
 
 class ReverseBeatControls : public EffectControls
 
@@ -125,3 +125,4 @@ private:
 
 
 #endif
+

@@ -21,7 +21,7 @@ namespace gui
         ReverseBeatControlDialog(ReverseBeatControls* controls);
         ~ReverseBeatControlDialog() override = default;
     };
-}
+} // namespace gui
 
 class ReverseBeatControls : public EffectControls
 {
@@ -69,5 +69,6 @@ private:
 };
 
 } // namespace lmms
+
 
 #endif

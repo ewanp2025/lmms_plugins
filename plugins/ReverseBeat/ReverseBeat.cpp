@@ -28,7 +28,7 @@ extern "C"
 
         "ReverseBeat",
 
-        QT_TRANSLATE_NOOP("PluginBrowser", "Detroit-style 4th beat reverse"),
+        QT_TRANSLATE_NOOP("PluginBrowser", "Reverse Buffer"),
 
         "Ewan Pettigrew",
 
@@ -300,4 +300,5 @@ extern "C" {
 
 
 } // namespace lmms
+
 
